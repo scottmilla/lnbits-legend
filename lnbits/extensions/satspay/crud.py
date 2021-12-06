@@ -28,7 +28,6 @@ async def create_charge(
 ) -> Charges:
     charge_id = urlsafe_short_hash()
     if onchainwallet:
-        wallet = await get_watch_wallet(onchainwallet)
         onchain = await get_fresh_address(onchainwallet)
         onchainaddress = onchain.address
     else:
