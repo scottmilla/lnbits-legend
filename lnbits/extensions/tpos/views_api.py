@@ -1,5 +1,6 @@
 from quart import g, jsonify, request
 from http import HTTPStatus
+import httpx
 
 from lnbits.core.crud import get_user, get_wallet
 from lnbits.core.services import create_invoice, check_invoice_status
@@ -7,7 +8,7 @@ from lnbits.decorators import api_check_wallet_key, api_validate_post_request
 
 from . import tpos_ext
 from .crud import create_tpos, get_tpos, get_tposs, delete_tpos
-
+from ..watchonly.crud import get_watch_wallet, get_fresh_address, get_mempool
 
 @tpos_ext.route("/api/v1/tposs", methods=["GET"])
 @api_check_wallet_key("invoice")
@@ -28,6 +29,7 @@ async def api_tposs():
     schema={
         "name": {"type": "string", "empty": False, "required": True},
         "currency": {"type": "string", "empty": False, "required": True},
+        "onchainwallet": {"type": "string", "empty": True, "required": False}
     }
 )
 async def api_tpos_create():
@@ -53,7 +55,10 @@ async def api_tpos_delete(tpos_id):
 
 @tpos_ext.route("/api/v1/tposs/<tpos_id>/invoices/", methods=["POST"])
 @api_validate_post_request(
-    schema={"amount": {"type": "integer", "min": 1, "required": True}}
+    schema={
+        "amount": {"type": "integer", "min": 1, "required": True},
+        "onchain": {"type": "boolean", "empty": False, "required": True}
+    }
 )
 async def api_tpos_create_invoice(tpos_id):
     tpos = await get_tpos(tpos_id)
@@ -62,12 +67,19 @@ async def api_tpos_create_invoice(tpos_id):
         return jsonify({"message": "TPoS does not exist."}), HTTPStatus.NOT_FOUND
 
     try:
-        payment_hash, payment_request = await create_invoice(
-            wallet_id=tpos.wallet,
-            amount=g.data["amount"],
-            memo=f"{tpos.name}",
-            extra={"tag": "tpos"},
-        )
+        if g.data['onchain']:
+            wallet = await get_watch_wallet(tpos.onchainwallet)
+            onchain = await get_fresh_address(tpos.onchainwallet)
+            onchainaddress = onchain.address
+
+            return jsonify({"onchainaddress": onchainaddress})
+        else:
+            payment_hash, payment_request = await create_invoice(
+                wallet_id=tpos.wallet,
+                amount=g.data["amount"],
+                memo=f"{tpos.name}",
+                extra={"tag": "tpos"},
+            )
     except Exception as e:
         return jsonify({"message": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
@@ -99,3 +111,13 @@ async def api_tpos_check_invoice(tpos_id, payment_hash):
         return jsonify({"paid": True}), HTTPStatus.OK
 
     return jsonify({"paid": False}), HTTPStatus.OK
+
+# @tpos_ext.route("/api/v1/tposs/<tpos_id>/txs/<onchainaddress>/<amount>", methods=["GET"])
+# async def api_tpos_check_address(tpos_id, onchainaddress, amount):
+#     tpos = await get_tpos(tpos_id)
+
+#     if not tpos:
+#         return jsonify({"message": "TPoS does not exist."}), HTTPStatus.NOT_FOUND
+
+#     res = await check_address_txs(onchainaddress, amount)
+#     return res

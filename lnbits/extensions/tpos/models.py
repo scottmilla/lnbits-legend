@@ -5,6 +5,7 @@ from typing import NamedTuple
 class TPoS(NamedTuple):
     id: str
     wallet: str
+    onchainwallet: str
     name: str
     currency: str
 

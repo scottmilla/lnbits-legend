@@ -12,3 +12,9 @@ async def m001_initial(db):
         );
     """
     )
+async def m002_on_chain_support(db):
+    """
+    Add onchainwallet field.
+    """
+    await db.execute("ALTER TABLE tpos.tposs ADD COLUMN onchainwallet TEXT;")
+    

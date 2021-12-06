@@ -54,7 +54,9 @@
                 ></q-btn>
               </q-td>
               <q-td v-for="col in props.cols" :key="col.name" :props="props">
-                {{ col.value }}
+                <div v-if="col.value==true"><q-icon class='text-teal' name='check' size="xs" /></div>
+                <div v-if="col.value==false"><q-icon class='text-red' name='cancel' size="xs" /></div>
+                <div v-if="col.value!=true&&col.value!=false">{{ col.value }}</div>
               </q-td>
               <q-td auto-width>
                 <q-btn
@@ -116,6 +118,29 @@
           :options="currencyOptions"
           label="Currency *"
         ></q-select>
+        <div v-if="walletLinks.length > 0">
+          <q-field bottom-slots stack-label counter :dense="dense">
+            <template v-slot:control>
+              <q-checkbox
+                v-model="formDialog.data.onchain"
+                label="Enable On-chain transactions "
+              />
+            </template>
+          <template v-slot:hint>
+            (Watch Only extension must be enabled)
+          </template>
+        </q-field>
+        </div>
+        <div v-if="formDialog.data.onchain">
+          <q-select
+            filled
+            dense
+            emit-value
+            v-model="formDialog.data.onchainwallet"
+            :options="walletLinks"
+            label="Select Onchain Wallet"
+          />
+        </div>
         <div class="row q-mt-lg">
           <q-btn
             unelevated
@@ -141,6 +166,7 @@
     )
     obj.fsat = new Intl.NumberFormat(LOCALE).format(obj.amount)
     obj.tpos = ['/tpos/', obj.id].join('')
+    obj.onchainwallet ? obj.onchainwallet=true : obj.onchainwallet=false
     return obj
   }
 
@@ -150,6 +176,7 @@
     data: function () {
       return {
         tposs: [],
+        walletLinks: [],
         currencyOptions: [
           'USD',
           'EUR',
@@ -327,6 +354,8 @@
           columns: [
             {name: 'id', align: 'left', label: 'ID', field: 'id'},
             {name: 'name', align: 'left', label: 'Name', field: 'name'},
+            {name: 'onchain', align: 'left', label: 'Enabled On-Chain', field: 'onchainwallet'},
+
             {
               name: 'currency',
               align: 'left',
@@ -340,7 +369,9 @@
         },
         formDialog: {
           show: false,
-          data: {}
+          data: {
+            onchain: false,
+          }
         }
       }
     },
@@ -366,7 +397,8 @@
       createTPoS: function () {
         var data = {
           name: this.formDialog.data.name,
-          currency: this.formDialog.data.currency
+          currency: this.formDialog.data.currency,
+          onchainwallet: this.formDialog.data.onchainwallet ?? ""
         }
         var self = this
 
@@ -411,12 +443,34 @@
       },
       exportCSV: function () {
         LNbits.utils.exportCSV(this.tpossTable.columns, this.tposs)
-      }
+      },
+      getWalletLinks: function () {
+        var self = this
+        LNbits.api
+          .request(
+            'GET',
+            '/watchonly/api/v1/wallet',
+            this.g.user.wallets[0].inkey
+          )
+          .then(function (response) {
+            for (i = 0; i < response.data.length; i++) {
+              self.walletLinks.push(response.data[i].id)
+            }
+            return
+          })
+          .catch(function (error) {
+            LNbits.utils.notifyApiError(error)
+          })
+      },
     },
     created: function () {
       if (this.g.user.wallets.length) {
         this.getTPoSs()
       }
+      if(this.g.user.extensions.includes('watchonly')){
+        this.getWalletLinks()
+      }
+      
     }
   })
 </script>
